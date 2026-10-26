@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -11,16 +12,18 @@ h1{font-size:30px;margin:5px;color:#71865f}
 .sub{font-size:11px;color:#a28b72;margin-bottom:12px}
 .game{max-width:650px;margin:auto;background:#fffaf0;padding:10px;border:3px solid #ddc9a9;border-radius:15px;box-shadow:0 5px #e3d3bc}
 canvas{width:100%;height:auto;display:block;border:3px solid #8fa477;border-radius:7px;image-rendering:pixelated}
-.stats{display:flex;justify-content:space-around;gap:5px;margin:10px 0;font-size:10px}
+.stats{display:flex;justify-content:space-around;flex-wrap:wrap;gap:5px;margin:10px 0;font-size:10px}
 .stats span{background:#eaf0dc;padding:7px;border-radius:7px}
-.dialog{background:#f7e8d8;border:2px solid #dfc7a8;border-radius:10px;padding:12px;text-align:left;min-height:90px;line-height:1.7;font-size:12px}
-#name{font-weight:bold;color:#71865f}
+.dialog{background:#f7e8d8;border:2px solid #dfc7a8;border-radius:10px;padding:12px;text-align:left;min-height:92px;line-height:1.7;font-size:12px;overflow-wrap:anywhere}
+#name{font-weight:bold;color:#71865f;margin-bottom:3px}
 #next{float:right;background:#dce8ca;border:1px solid #b5c99b;border-radius:8px;padding:7px 12px;font-family:monospace}
-.controls{display:grid;grid-template-columns:repeat(3,58px);gap:7px;justify-content:center;margin:14px}
+.controls{display:grid;grid-template-columns:repeat(3,58px);gap:7px;justify-content:center;margin:14px auto 10px}
 button{background:#fff7e9;border:2px solid #d9c5a4;border-radius:10px;padding:12px;font-weight:bold;color:#675845;font-family:monospace;touch-action:manipulation}
 button:active{background:#dce8ca}
 .talk{background:#dce8ca;font-size:11px}
-.hint{font-size:10px;color:#9d8b77;line-height:1.8}
+.actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0}
+.actions button{padding:9px 12px;font-size:11px}
+.hint{font-size:10px;color:#9d8b77;line-height:1.8;margin:8px 0 2px}
 </style>
 </head>
 <body>
@@ -29,61 +32,113 @@ button:active{background:#dce8ca}
 
 <div class="game">
 <canvas id="c" width="480" height="320"></canvas>
+
 <div class="stats">
-<span>☀ DAY 1</span><span>⌂ MEADOW TOWN</span><span id="count">♡ FRIENDS 0/5</span>
+<span id="dayLabel">☀ DAY 1</span>
+<span>⌂ MEADOW TOWN</span>
+<span id="count">♡ FRIENDS 0/5</span>
 </div>
-<div class="dialog">
+
+<div class="dialog" aria-live="polite">
 <div id="name">SYSTEM</div>
 <div id="text">welcome to Meadow Town! ayo temui teman-temanmu ♡</div>
 <button id="next" hidden onclick="talk()">NEXT →</button>
 <div style="clear:both"></div>
 </div>
+
 <div class="controls">
 <div></div><button onclick="move(0,-1)">▲</button><div></div>
-<button onclick="move(-1,0)">◀</button><button class="talk" onclick="talk()">TALK ♡</button><button onclick="move(1,0)">▶</button>
+<button onclick="move(-1,0)">◀</button>
+<button class="talk" onclick="talk()">TALK ♡</button>
+<button onclick="move(1,0)">▶</button>
 <div></div><button onclick="move(0,1)">▼</button><div></div>
 </div>
-<div class="hint">dekati karakter untuk ngobrol<br>gerak pakai WASD / tombol arah · SPACE untuk interaksi</div>
+
+<div class="actions">
+<button id="dayButton" onclick="nextDay()" hidden>DAY 2 →</button>
+<button onclick="resetGame()">↻ RESTART</button>
+</div>
+
+<div class="hint">dekati karakter untuk ngobrol<br>
+gerak pakai WASD / tombol arah · SPACE untuk interaksi</div>
 </div>
 
 <script>
-const cv=document.getElementById("c"),g=cv.getContext("2d"),T=32;
+const cv=document.getElementById("c");
+const g=cv.getContext("2d");
+const T=32;
+
 const player={x:7,y:6};
-let met=new Set(),busy=false,active=null;
+let met=new Set();
+let busy=false;
+let day=1;
+let scene="town";
+let houseVisit=false;
+let day1Complete=false;
 
 const people=[
-{id:"mei",name:"Mei",x:3,y:3,style:"bob",hair:"#171519",skin:"#f2c8a9",clothes:"#e8a5b7",lines:["EHH HALO!! kamu mau ngobrol sama aku ya?","kayaknya asik ya disini!","iloveyou"]},
-{id:"rara",name:"Rara",x:7,y:2,style:"long",hair:"#171519",skin:"#f1cbb2",clothes:"#414149",hood:true,lines:["haii..","aku capek deh rasanya mau tidur","udah yaa, bay bay"]},
-{id:"alya",name:"Alya",x:11,y:3,style:"bun",hair:"#171519",skin:"#f2c8a9",clothes:"#24252a",glasses:true,lines:["haii, ada apa?","jangan liatin chatan ak sama ayang ku yaa!!","eheheh","aku gatau si mau ngapain"]},
-{id:"halimah",name:"Halimah",x:3,y:7,style:"pony",hair:"#171519",skin:"#f2c8a9",clothes:"#91a9c6",lines:["Haii npc!","pacarku ada di sebelah ku tau","iya ya","baybayy"]},
-{id:"adiba",name:"Adiba",x:11,y:7,style:"curly",hair:"#171519",skin:"#edc3a4",clothes:"#779b70",glasses:true,lines:["hi","oh iya","ahahahha"]}
+{id:"mei",name:"Mei",x:3,y:3,style:"bob",hair:"#171519",skin:"#f2c8a9",clothes:"#e8a5b7",
+lines:["EHH HALO!! kamu mau ngobrol sama aku ya?","kayaknya asik ya di sini!","hehe, semoga kita jadi teman ya ♡"]},
+
+{id:"rara",name:"Rara",x:7,y:2,style:"long",hair:"#171519",skin:"#f1cbb2",clothes:"#414149",hood:true,
+lines:["haii..","aku capek deh, rasanya mau tidur.","udah yaa, bay bay!"]},
+
+{id:"alya",name:"Alya",x:11,y:3,style:"bun",hair:"#171519",skin:"#f2c8a9",clothes:"#24252a",glasses:true,
+lines:["haii, ada apa?","jangan liatin chat-an aku sama ayangku yaa!!","eheheh.","aku gatau sih mau ngapain."]},
+
+{id:"halimah",name:"Halimah",x:3,y:7,style:"pony",hair:"#171519",skin:"#f2c8a9",clothes:"#91a9c6",
+lines:["Haii, NPC!","pacarku ada di sebelahku tau.","iya yaa.","baybayy!"]},
+
+{id:"adiba",name:"Adiba",x:11,y:7,style:"curly",hair:"#171519",skin:"#edc3a4",clothes:"#779b70",glasses:true,
+lines:["hi!","oh iya.","ahahahaha!"]}
 ];
 
-function box(x,y,w,h,col){g.fillStyle=col;g.fillRect(x,y,w,h)}
-function tile(x,y,col){box(x*T,y*T,T,T,col)}
+function box(x,y,w,h,col){
+g.fillStyle=col;
+g.fillRect(x,y,w,h);
+}
+
+function tile(x,y,col){
+box(x*T,y*T,T,T,col);
+}
 
 function drawGround(){
-for(let y=0;y<10;y++)for(let x=0;x<15;x++){
+for(let y=0;y<10;y++){
+for(let x=0;x<15;x++){
 tile(x,y,(x+y)%2?"#8bc478":"#94ce80");
-if((x*13+y*7)%11===0)box(x*T+7,y*T+9,3,3,"#b9d99a");
+if((x*13+y*7)%11===0)
+box(x*T+7,y*T+9,3,3,"#b9d99a");
 }
-// jalan setapak
+}
+
 for(let x=0;x<15;x++)tile(x,4,"#e8d2a7");
-for(let y=0;y<10;y++){tile(6,y,"#e8d2a7");tile(7,y,"#e8d2a7")}
+
+for(let y=0;y<10;y++){
+tile(6,y,"#e8d2a7");
+tile(7,y,"#e8d2a7");
+}
+
 for(let x=2;x<13;x++)tile(x,8,"#e8d2a7");
-// pola jalan
-for(let x=0;x<15;x+=2){box(x*T+5,4*T+7,8,2,"#f4e2bd");box(x*T+18,4*T+21,7,2,"#f4e2bd")}
+
+for(let x=0;x<15;x+=2){
+box(x*T+5,4*T+7,8,2,"#f4e2bd");
+box(x*T+18,4*T+21,7,2,"#f4e2bd");
+}
 }
 
 function house(x,y,w,h,wall,roof){
 let px=x*T,py=y*T;
+
 box(px+2,py+10,w*T-4,h*T-7,"#b18a62");
 box(px,py,w*T,14,roof);
 box(px+5,py+14,w*T-10,h*T-21,wall);
+
 box(px+8,py+17,10,10,"#bce2e6");
 box(px+w*T-18,py+17,10,10,"#bce2e6");
+
 box(px+12,py+17,2,10,"#fff4dc");
 box(px+8,py+21,10,2,"#fff4dc");
+
 box(px+w*T/2-5,py+h*T-18,10,18,"#875e43");
 box(px+w*T/2+2,py+h*T-10,2,2,"#f6d789");
 box(px+4,py+4,w*T-8,3,"#fff0d2");
@@ -91,6 +146,7 @@ box(px+4,py+4,w*T-8,3,"#fff0d2");
 
 function tree(x,y){
 let px=x*T,py=y*T;
+
 box(px+13,py+17,7,15,"#946c49");
 box(px+3,py+8,26,15,"#4b8a55");
 box(px+7,py+2,19,19,"#5c9c61");
@@ -100,6 +156,7 @@ box(px+1,py+12,8,7,"#55965d");
 
 function flower(x,y,color){
 let px=x*T,py=y*T;
+
 box(px+15,py+17,2,9,"#478c50");
 box(px+9,py+10,6,6,color);
 box(px+18,py+10,6,6,color);
@@ -110,175 +167,114 @@ box(px+14,py+11,4,4,"#f8df8a");
 
 function world(){
 drawGround();
+
 house(0,0,3,2,"#f3dfbf","#c67d7a");
 house(12,0,3,2,"#e7d5ed","#9b82b1");
 house(0,5,2,2,"#f2d8b9","#d99d67");
 house(13,5,2,2,"#dce8ce","#789d79");
 house(6,0,3,2,"#e8ddd0","#777986");
 
-[[3,0],[10,0],[1,3],[13,3],[2,9],[12,9]].forEach(p=>tree(...p));
+[[3,0],[10,0],[1,3],[13,3],[2,9],[12,9]]
+.forEach(p=>tree(...p));
 
 for(let x=0;x<15;x++){
-if(x%2===0){flower(x,5,"#f4b8ce");flower(x,7,"#f5df8e")}
+if(x%2===0){
+flower(x,5,"#f4b8ce");
+flower(x,7,"#f5df8e");
 }
-[[4,2],[10,2],[5,6],[9,6],[1,8],[13,8]].forEach((p,i)=>flower(p[0],p[1],i%2?"#f3b6cb":"#f5df8e"));
+}
 
-// kolam kecil
+[[4,2],[10,2],[5,6],[9,6],[1,8],[13,8]]
+.forEach((p,i)=>flower(p[0],p[1],i%2?"#f3b6cb":"#f5df8e"));
+
+// kolam
 box(8*T,6*T,3*T,T,"#80c9df");
 box(8*T+5,6*T+5,3*T-10,T-10,"#69b7d3");
 box(9*T,6*T+7,8,4,"#b9e9eb");
 box(10*T+9,6*T+19,7,4,"#b9e9eb");
 box(9*T+14,6*T+14,7,3,"#a7d76f");
 
-// bangku taman
+// bangku
 box(4*T,6*T+17,27,6,"#a8764d");
 box(4*T+3,6*T+13,22,4,"#d4a06a");
 box(4*T+5,6*T+23,3,8,"#886342");
 box(4*T+23,6*T+23,3,8,"#886342");
 }
 
+function drawHouseInterior(){
+box(0,0,480,320,"#e9d7bd");
+
+for(let y=0;y<10;y++){
+for(let x=0;x<15;x++){
+tile(x,y,(x+y)%2?"#d9b995":"#e2c6a4");
+}
+}
+
+box(0,0,480,90,"#f2dfc8");
+
+for(let x=8;x<480;x+=32){
+box(x,0,2,90,"#e6ccb0");
+}
+
+// karpet
+box(108,180,264,95,"#b9c99e");
+box(118,190,244,75,"#d7e2c1");
+
+// sofa
+box(135,112,210,57,"#b98d9b");
+box(125,124,25,49,"#d8aab7");
+box(330,124,25,49,"#d8aab7");
+box(145,119,190,43,"#e4b7c3");
+
+// TV
+box(210,40,60,38,"#6e6d78");
+box(216,46,48,25,"#a9d5d8");
+box(235,78,10,8,"#8b725a");
+box(222,85,36,5,"#8b725a");
+
+// tanaman
+box(35,115,35,45,"#bd9b75");
+box(40,103,25,17,"#6b9b66");
+box(45,93,15,18,"#80b879");
+
+box(407,115,35,45,"#bd9b75");
+box(412,103,25,17,"#6b9b66");
+box(417,93,15,18,"#80b879");
+
+// meja
+box(194,220,92,25,"#b98d64");
+box(200,245,7,25,"#98704f");
+box(273,245,7,25,"#98704f");
+}
+
 function character(p,isPlayer=false){
 let x=p.x*T,y=p.y*T;
-if(!isPlayer){
-box(x+7,y+29,18,3,"#68955e");
+
+if(!isPlayer)box(x+7,y+29,18,3,"#68955e");
+
+if(p.style==="long"){
+box(x+6,y+7,5,21,p.hair);
+box(x+23,y+7,5,21,p.hair);
 }
-if(p.style==="long"){box(x+6,y+7,5,21,p.hair);box(x+23,y+7,5,21,p.hair)}
-if(p.style==="pony"){box(x+22,y+8,6,18,p.hair);box(x+24,y+18,5,8,p.hair)}
-if(p.style==="bun"){box(x+10,y,12,8,p.hair);box(x+12,y-3,9,6,p.hair)}
+
+if(p.style==="pony"){
+box(x+22,y+8,6,18,p.hair);
+box(x+24,y+18,5,8,p.hair);
+}
+
+if(p.style==="bun"){
+box(x+10,y,12,8,p.hair);
+box(x+12,y-3,9,6,p.hair);
+}
+
 if(p.style==="curly"){
-box(x+5,y+7,7,8,p.hair);box(x+21,y+6,7,8,p.hair);
-box(x+7,y+12,5,8,p.hair);box(x+22,y+12,5,8,p.hair);
-box(x+9,y+3,6,6,p.hair);box(x+16,y+2,6,6,p.hair);
+box(x+5,y+7,7,8,p.hair);
+box(x+21,y+6,7,8,p.hair);
+box(x+7,y+12,5,8,p.hair);
+box(x+22,y+12,5,8,p.hair);
+box(x+9,y+3,6,6,p.hair);
+box(x+16,y+2,6,6,p.hair);
 }
+
 box(x+9,y+8,15,16,p.skin);
-box(x+6,y+13,4,5,p.skin);box(x+23,y+13,4,5,p.skin);
-
-if(p.style==="bob"){
-box(x+7,y+5,19,9,p.hair);box(x+6,y+9,5,13,p.hair);box(x+23,y+9,5,13,p.hair);
-}
-if(p.style==="long"){box(x+7,y+5,19,9,p.hair);box(x+9,y+3,14,5,p.hair)}
-if(p.style==="pony"){box(x+7,y+5,19,9,p.hair);box(x+10,y+3,13,5,p.hair)}
-if(p.style==="bun"){box(x+7,y+5,19,9,p.hair);box(x+7,y+8,4,12,p.hair);box(x+23,y+8,4,12,p.hair)}
-if(p.style==="curly"){box(x+8,y+5,16,7,p.hair);box(x+10,y+3,5,5,p.hair);box(x+17,y+2,5,6,p.hair)}
-
-box(x+12,y+15,2,3,"#41312b");
-box(x+20,y+15,2,3,"#41312b");
-box(x+10,y+19,3,2,"#e99c9b");
-box(x+21,y+19,3,2,"#e99c9b");
-
-if(p.hood){
-box(x+5,y+21,23,10,"#414149");
-box(x+8,y+20,17,5,"#414149");
-box(x+13,y+23,6,5,"#34343b");
-}else{
-box(x+7,y+23,19,8,p.clothes);
-box(x+5,y+24,4,6,p.clothes);
-box(x+24,y+24,4,6,p.clothes);
-if(p.id==="adiba"){box(x+14,y+23,5,8,"#f3e6d2")}
-}
-box(x+10,y+30,5,2,"#665045");box(x+20,y+30,5,2,"#665045");
-
-if(p.glasses){
-box(x+10,y+14,7,6,"#77777d");box(x+18,y+14,7,6,"#77777d");
-box(x+11,y+15,5,4,"#c9dce0");box(x+19,y+15,5,4,"#c9dce0");
-box(x+17,y+16,1,2,"#77777d");
-}
-if(!isPlayer){
-g.font="bold 9px monospace";g.textAlign="center";
-let w=g.measureText(p.name).width+8;
-box(x+16-w/2,y-13,w,11,"#fff8e9");
-g.fillStyle="#586d4c";g.fillText(p.name,x+16,y-5);
-if(!met.has(p.id)&&!p.gone){
-box(x+23,y-23,10,10,"#fff0a8");
-g.fillStyle="#8c7149";g.fillText("!",x+28,y-15);
-}
-}
-}
-
-function render(){
-g.clearRect(0,0,480,320);
-world();
-people.forEach(p=>{if(!p.gone)character(p)});
-character(player,true);
-}
-
-function msg(name,text,button=false){
-document.getElementById("name").textContent=name;
-document.getElementById("text").textContent=text;
-document.getElementById("next").hidden=!button;
-}
-
-function nearby(){
-return people.find(p=>!p.gone&&!p.busy&&Math.abs(p.x-player.x)+Math.abs(p.y-player.y)<=1);
-}
-
-function walk(p,tx,ty,done){
-let timer=setInterval(()=>{
-if(p.x<tx)p.x++;
-else if(p.x>tx)p.x--;
-else if(p.y<ty)p.y++;
-else if(p.y>ty)p.y--;
-render();
-if(p.x===tx&&p.y===ty){clearInterval(timer);done()}
-},300);
-}
-
-function talk(){
-if(busy)return;
-let p=nearby();
-if(!p){msg("SYSTEM","belum ada teman di dekatmu. coba dekati salah satu karakter!");return}
-if(p.progress===undefined)p.progress=0;
-if(p.progress>=p.lines.length){msg(p.name,"kita udah ngobrol semua yaa ♡");return}
-
-msg(p.name,p.lines[p.progress],true);
-p.progress++;
-
-if(!met.has(p.id)){
-met.add(p.id);
-document.getElementById("count").textContent="♡ FRIENDS "+met.size+"/5";
-}
-
-if((p.id==="rara"||p.id==="halimah")&&p.progress>=p.lines.length){
-busy=true;
-document.getElementById("next").hidden=true;
-setTimeout(()=>{
-p.busy=true;
-msg("SYSTEM",p.id==="rara"?"Rara: aku pulang dulu yaa...":"Halimah: baybayy! aku ke Adiba dulu ya.");
-let tx=p.id==="rara"?7:10,ty=p.id==="rara"?1:6;
-walk(p,tx,ty,()=>{
-p.gone=true;p.busy=false;busy=false;render();
-msg("SYSTEM",p.id==="rara"?"Rara sudah pulang ke rumahnya.":"Halimah sekarang bersama Adiba.");
-});
-},700);
-}
-render();
-}
-
-function move(dx,dy){
-if(busy)return;
-let nx=player.x+dx,ny=player.y+dy;
-if(nx<0||nx>14||ny<0||ny>9)return;
-if(people.some(p=>!p.gone&&p.x===nx&&p.y===ny)){
-msg("LITTLE DAYS","ada teman di depanmu! coba dekati dari arah lain.");
-return;
-}
-player.x=nx;player.y=ny;
-let p=nearby();
-if(p)msg(p.name,"haii! pencet TALK ♡ kalau mau ngobrol.");
-else msg("LITTLE DAYS","nikmati harimu di Meadow Town ♡");
-render();
-}
-
-document.addEventListener("keydown",e=>{
-let k=e.key.toLowerCase();
-if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k))e.preventDefault();
-if(k==="w"||k==="arrowup")move(0,-1);
-if(k==="s"||k==="arrowdown")move(0,1);
-if(k==="a"||k==="arrowleft")move(-1,0);
-if(k==="d"||k==="arrowright")move(1,0);
-if(k===" "||k==="enter")talk();
-});
-render();
-</script>
-</body>
-                                                                              </html>
+box(x+6
